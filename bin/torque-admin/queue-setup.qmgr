@@ -1,0 +1,71 @@
+#
+# Create queues and set their attributes.
+#
+#
+# Create and define queue reject
+#
+create queue reject
+set queue reject queue_type = Execution
+set queue reject Priority = 500
+set queue reject from_route_only = True
+set queue reject resources_max.cput = 00:00:10
+set queue reject resources_max.mem = 1kb
+set queue reject enabled = True
+set queue reject started = True
+
+#
+# Create and define queue short
+#
+create queue short
+set queue short queue_type = Execution
+set queue short Priority = 250
+set queue short from_route_only = True
+set queue short resources_max.cput = 24:00:00
+set queue short resources_default.cput = 08:00:00
+set queue short resources_default.mem = 1999mb
+set queue short resources_default.nice = 5
+set queue short resources_default.nodect = 1
+set queue short resources_default.nodes = 1
+set queue short kill_delay = 30
+set queue short enabled = True
+set queue short started = True
+#
+# Create and define queue long
+#
+create queue long
+set queue long queue_type = Execution
+set queue long Priority = 50
+set queue long from_route_only = True
+set queue long resources_min.cput = 24:00:00
+set queue long resources_max.cput = 168:00:00
+set queue long resources_default.cput = 72:00:00
+set queue long resources_default.mem = 1999mb
+set queue long resources_default.nice = 15
+set queue long resources_default.nodect = 1
+set queue long resources_default.nodes = 1
+set queue long enabled = True
+set queue long started = True
+
+create queue q_feed
+set queue q_feed queue_type = Route
+set queue q_feed Priority = 1000
+set queue q_feed route_destinations = reject
+set queue q_feed route_destinations += short
+set queue q_feed route_destinations += long
+set queue q_feed enabled = True
+set queue q_feed started = True
+#
+#
+set server scheduling = True
+set server managers += jkitchin@gilgamesh.cheme.cmu.edu
+set server managers += rommel@gilgamesh.cheme.cmu.edu
+set server managers += walesi@gilgamesh.cheme.cmu.edu
+set server operators += jkitchin@gilgamesh.cheme.cmu.edu
+set server operators += rommel@gilgamesh.cheme.cmu.edu
+set server operators += walesi@gilgamesh.cheme.cmu.edu
+set server default_queue = q_feed
+set server log_events = 255
+set server mail_from = gilgamesh-torque
+set server query_other_jobs = True
+set server scheduler_iteration = 600
+set server comment = "Gilgamesh cluster"

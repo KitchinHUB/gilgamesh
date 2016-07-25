@@ -1,0 +1,262 @@
+* About gilgamesh
+gilgamesh.cheme.cmu.edu is a computing cluster housed in the Department of Chemical Engineering at CMU.
+
+The cluster consists 30 nodes:
+
+- 2  nodes with 32 cores 256 GB RAM/node (nodes n00-n01)
+- 6  nodes with 32 cores 128 GB RAM/node (nodes n02-n07)
+- 12 nodes with 32 cores 64GB RAM/node   (nodes n08-n19)
+- 11 nodes with 48 cores 128 GB/RAM/node (ndoes n20-n30)
+
+Nodes 11 and 12 are currently dead.
+
+The cpus are from AMD and are connected by Gigabit and Infiniband networks.
+
+** Accounts on gilgamesh
+Accounts are usually reserved for members of the research groups supporting gilgamesh (Kitchin, McGaughey, Viswanathan). To request an account send an email to jkitchin@andrew.cmu.edu with your name, advisor and andrewID in it.
+
+Note: There is no backup on gilgamesh. You are responsible for backing up your data.
+
+** Accessing gilgamesh.cheme.cmu.edu
+gilgamesh can only be accessed by ssh from IP addresses in the cmu domain. Therefore, your options to login are:
+
+- from a computer on campus.
+- through a VPN (e.g. CiscoVPN with the campus certificate).
+- from a remote machine that is logged into a campus machine.
+
+** Setting up your account
+We make extensive use of modules to set up the compilers, executables and libraries that are available to you. In your setup file (.cshrc or .bashrc) you simply load the modules that you need. e.g.:
+
+#+BEGIN_SRC sh
+module load netcdf-3.6.1-gcc
+#+END_SRC
+
+That command will put the netcdf libraries and commands in your paths. You can load modules in your setup file, or at the command line, or in your scripts.
+
+To find out which modules are available, use the command:
+
+#+BEGIN_SRC sh
+module avail
+#+END_SRC
+
+#+RESULTS:
+
+Note for bash/tcsh users, you must put the line “source /etc/profile.d/modules.sh” near the top of your .cshrc file.
+
+Here is an example .bashrc file that loads a basic environment with Python
+#+BEGIN_SRC sh :tangle ~/.bashrc
+# .bashrc
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+	. /etc/bashrc
+fi
+
+source /etc/profile.d/modules.sh
+
+# User specific aliases and functions
+module load molsim-06-640-s16
+
+#end
+#+END_SRC
+
+** Running jobs on gilgamesh
+ALL compute intensive jobs should be submitted through our queue system. We utilize Torque and Maui for scheduling and running jobs. The standard Torque commands are available at the command line. To use the Maui commands you must first load the maui module (module load maui) at the command line or in your startup file.
+
+The queue system is setup to enable fair usage of the entire cluster by all users. Jobs are run with different priorities according to the resources they use. Short jobs (up to 24 hours) are given higher priority than long jobs (up to 168 hours). There are limits that prevent any group or user from using more than half of the cluster.
+
+Temporary exceptions to these queues may be considered. These exceptions must be requested with the reason and justification and approval of the request from your advisor. 
+
+** Preparation of jobscripts
+Normally job scripts consist of scripts or executables which execute the commands that run your simulation. Usually you need to remember to have this line in your script:
+
+#+BEGIN_SRC sh
+cd $PBS_O_WORKDIR
+#+END_SRC
+or:
+
+#+BEGIN_SRC sh
+cd /path/to/your/jobscript
+#+END_SRC
+
+which tells your script to change directory from $HOME where it starts to the working directory where the calculation is supposed to be run. It is not necessary for your jobscript to be executable, but any commands in the script should exist on your $PATH and should be executable.
+
+Once you create your script, then you must submit it to the queue. To do this you use the qsub command along with options that request resources, e.g. how long would you like to run, how many nodes you need, how much memory, etc... These options must be put at the command line, all #PBS directives inside scripts are ignored. Here are some examples of submitting job scripts.
+
+#. To request an interactive session on a node to run scripts from the command line for up to 5 hours.
+
+#+BEGIN_SRC sh
+qsub -I -l walltime=5:00:00
+#+END_SRC
+
+To run a serial job for up to 48 hours
+
+#+BEGIN_SRC sh
+qsub -l walltime=48:00:00 -joe jobscript.sh
+#+END_SRC
+
+To request 32 cores on one node for up to 168 hours
+
+#+BEGIN_SRC sh
+qsub -l walltime=168:00:00,nodes=1:ppn=32 -joe jobscript.sh
+#+END_SRC
+
+Note your jobscript must now how to start a parallel process, e.g. using mpirun. Simply asking for the nodes will not make it run in parallel!
+To request any 32 cores on any node for 24 hours
+
+#+BEGIN_SRC sh
+qsub -l walltime=24:00:00,nodes=32 -joe jobscript
+#+END_SRC
+
+To request any 32 cores on any node with 128 GB of memory for 24 hours
+
+#+BEGIN_SRC sh
+qsub -l walltime=24:00:00,nodes=32,mem=128gb -joe jobscript
+#+END_SRC
+
+Once you have submitted your jobs you may want to monitor them. To find out the status of your jobs use the command:
+
+#+BEGIN_SRC sh
+qstat | grep $USER
+#+END_SRC
+
+this will list your jobs and tell you whether they are running, or queued, and give you the jobid of each job. To get details about a particular job use:
+
+#+BEGIN_SRC sh
+qstat -f jobid
+#+END_SRC
+
+If you need to delete a job, use the qdel command:
+
+#+BEGIN_SRC sh
+qdel jobid
+#+END_SRC
+
+** Getting help on gilgamesh
+When asking for help it is critical that you provide as much information about your problem as you can. simply saying “it doesn’t work” will not get you an answer. You should provide all error messages that you observed, and anything you did that led up to the error.
+
+Use google! I have often found solutions by googling the error message, or parts of the error message.
+
+If the problem is related to a job in the queue, examine the output of the jobscript.ojobid and jobscript.ejobid (the output and error files from the queue). use the tracejob jobid to see what the queue knows about the job and its history. Try running the job through an interactive queue session from the command line (qsub -I). Sometimes it easier to figure out what is happening that way.
+
+Search https://lists.andrew.cmu.edu/pipermail/gilgamesh-users/ of gilgamesh-users@andrew.cmu.edu for similar problems. If you don’t find anything then send an email to mailto:gilgamesh-users@andrew.cmu.edu to see if anyone else has had the problem, and when you finally get the solution send that to the maillist so that others can see the solution too.
+
+Check with other users and your advisor to see if he/she knows anything about the problem.
+
+
+* Software
+
+In general you can find a list of installed software packages by typing:
+
+#+BEGIN_SRC sh
+module avail
+#+END_SRC
+
+Members of the Kitchin, and McGaughey groups may install software for their groups in /opt/kitchingroup or /opt/mcgaugheygroup.
+
+If rpms exist in known repositories you may request additional software be installed on the cluster, provided it does not conflict with existing software and that all dependencies on other packages are resolved.
+
+If new software requires compiling and root privileges you will need to discuss the installation with Professor Kitchin, and provide him with detailed information about the compilation.
+
+** Matlab
+*** Using Matlab on gilgamesh
+ Matlab should be automatically available on all the nodes on gilgamesh. Here is how you set up your m-file to run as a batch job. Make sure you put exit at the end, e.g. like this.
+
+ #+BEGIN_SRC matlab
+a = 4;
+b = 5;
+a + b
+exit
+ #+END_SRC
+
+ To submit this job to the queue, use this script:
+
+ #+BEGIN_SRC sh
+#!/bin/bash
+cd $PBS_O_WORKDIR
+unset DISPLAY
+pwd
+matlab  -nojvm -nosplash -nodisplay -r myscript
+
+#end
+ #+END_SRC
+
+ Another way to submit the job that doesn’t require writing a script is:
+
+ #+BEGIN_SRC sh
+qsub -l walltime=3:00:00 << EOF
+> cd $PBS_O_WORKDIR
+> unset DISPLAY
+> matlab  -nojvm -nosplash -nodisplay -r myscript
+> EOF
+ #+END_SRC
+
+*** Running Matlab interactively
+ You may prefer to run Matlab interactively. In this case, request an interactive job through the queue:
+
+ #+BEGIN_SRC sh
+qsub -I -l walltime=4:00:00
+ #+END_SRC
+
+ Note it is hard to tell what the options above are in some browsers. the first one is a capital i, the second is lower case L.
+ Wait to get a prompt, and run your script. Note that the nodes do not have a display, so you won’t be able to create graphs or use the graphics desktop.
+
+* Gilgamesh in emacs
+There is a gilgamesh.el file in this directory that provides some useful functions to interact with gilgamesh.
+
+#+BEGIN_SRC emacs-lisp
+(load-file "gilgamesh.el")
+(load-file "ivy-gilgamesh.el")
+#+END_SRC
+
+#+RESULTS:
+: t
+
+elisp:qstat is a helm interface to qstat. You can get info on and delete jobs as actions.
+
+elisp:gilgamesh-net will show a buffer with the net traffic on each node.
+
+elisp:gilgamesh-pbsnodes should prompt for a node, then show you a buffer of the jobs on the node.
+
+
+elisp:ivy-top Runs top with an ivy selection buffer
+
+elisp:ivy-qstat Runs qstat with an ivy-selection buffer
+
+elisp:ivy-pbsnodes Runs pbsnodes via ivy. It shows the node and load in the selection buffer.
+
+elisp:ivy-node-ps will prompt you for a node, then show the processes on the node. 
+
+elisp:ivy-net will show a list of nodes with net-traffic. The default action is to show the processes on the node.
+
+* Administrative notes
+
+** Adding new users
+Use the  as gui tool to add new users and configure groups. 
+
+#+BEGIN_SRC sh
+sudo 
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(load-file "gilgamesh-cmds.el")
+(sudo "/usr/bin/system-config-users")
+#+END_SRC
+#+RESULTS:
+: 1
+
+Use the command
+
+#+BEGIN_SRC sh
+chage -d 0 userid
+#+END_SRC	
+
+to force the users to change their passwords on login.
+
+
+** Restarting torque daemons
+To restart the torque daemon on a compute node, all of the startup scripts are located in /etc/beowulf/init.d on the head node.  To start a script on a particular compute node, run the following command:
+
+NODE=15 /etc/beowulf/init.d/90torque
+
+where '15' is the node number.  You may get some warnings that some mounts are already there, but the net result should be that pbs_mom is restarted on that node.

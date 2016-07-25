@@ -1,0 +1,78 @@
+#+TITLE: Message to new users
+
+
+* Logging into the cluster
+
+You should use ssh to login to the cluster. The cluster is named
+gilgamesh.cheme.cmu.edu.
+
+please use passwd to change your password immediately.
+
+* General policies
+
+Do not run compute intensive jobs on the head node. Small jobs for
+analysis are fine. If your jobs are slowing down the head node,
+however, we will ask you to submit them to the queue.
+
+You should do your work as it suits you. The queue system will
+eventually be set up to give all users fair shares of the computing
+resources, and policies will be adapted to achieve that goal. If your
+work habits cause problems, we will let you know and help you adjust
+them.
+
+Please monitor your disk usage. There are currently no quotas
+setup. If disk utilization becomes an issue, large disk space users
+will be asked to reduce their usage.
+
+
+* Queue system
+
+All compute intensive jobs should be submitted to the queue. We use
+the Torque queue system. There are two queues setup, a short queue for
+jobs taking less than one day, and a long queue for jobs taking up to
+7 days. Jobs exceeding these times will be killed by the queue system.
+
+you submit your job like this
+
+#+BEGIN_SRC sh
+qsub -l cput=hours:minutes:seconds jobscript
+#+END_SRC
+
+(of course you may add whatever other options you want). The default
+memory request is approximately 2GB. If you want more, then you should
+request it, e.g.
+
+#+BEGIN_SRC sh
+qsub -l cput=hours:minutes:seconds,mem=8GB jobscript
+#+END_SRC
+
+to run on more than one node you can do something like:
+
+#+BEGIN_SRC sh
+qsub -l cput=168:00:00,mem=8GB,nodes=9  jobscript
+#+END_SRC
+
+If you need to do command line work, and it is compute intensive, you
+should submit an interactive queue job like this:
+
+#+BEGIN_SRC sh
+qsub -I -l cput=4:00:00  jobscript
+#+END_SRC
+
+this will give you a command line interface on one of the nodes for 4 hours. 
+
+you can monitor your jobs with the qstat command.
+
+#+BEGIN_SRC sh
+qstat
+#+END_SRC
+
+* Web monitoring of gilgamesh
+
+
+You can see the status of the cluster at:
+
+http://gilgamesh.cheme.cmu.edu/ganglia
+
+unfortunately there is not a web-based view of the queue system at the
+moment. That will be addressed when I return in September.
