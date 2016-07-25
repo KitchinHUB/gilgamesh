@@ -1,0 +1,296 @@
+* Compiled code
+#+BEGIN_SRC python :tangle ../logging.py :shebang "#!/usr/bin/env python"
+from subprocess import check_output
+from subprocess import CalledProcessError
+from subprocess import Popen
+from subprocess import PIPE
+import datetime
+
+def memory_warning(cutoff=4.0, node='-1', users=None):
+
+    bpstat = Popen('bpstat -P {}'.format(str(node)).split(),
+                   stdin=PIPE, stdout=PIPE)
+    ls = Popen('ps -e -o pid,vsz,user,comm='.split(), stdout=bpstat.stdin)
+    output = bpstat.communicate()[0]
+    ls.wait()
+
+    MEM = {}
+    for line in output.split('\n')[1:-1]:
+
+        if str(node) == '-1' or str(node) == 'master':
+            ID = line.split()[0]
+            mem = float(line.split()[1]) / 1e6
+            user = line.split()[2]
+            com = ' '.join(line.split()[3:])
+        else:
+            ID = line.split()[1]
+            mem = float(line.split()[2]) / 1e6
+            user = line.split()[3]
+            com = ' '.join(line.split()[4:])
+    
+        if user not in MEM.keys():
+            MEM[user] = [mem, [[mem, com, int(ID)]]]
+        else:
+            MEM[user][0] += mem
+            MEM[user][1] += [[mem, com, int(ID)]]
+
+    SUM = sum([v[0] for k, v in MEM.iteritems()])
+
+    # sort by memory
+    sort_users = [u for u, m in sorted([[k, v[0]] for k, v in MEM.iteritems()],
+                                       key=lambda x: x[1], reverse=True)]
+
+    if users is None:
+        users = sort_users
+    elif isinstance(users, str):
+        users = [users]
+
+    time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    stdout = '{}\nTotal allocated memory: {:>24.2f} GB\n'.format(time, SUM)
+
+    for user in users:
+        tot, v = MEM[user]
+        stdout += 'user: {:<34} {:>7.2f} GB\n'.format(user, tot)
+        if tot > float(cutoff):
+            stdout += '\n    Top 5 processes:\n'
+            stdout += 'PID     MEM (GB)   COMM\n'
+
+            ind = [i for i, l in sorted(enumerate(v),
+                                        key=lambda x: x[1],
+                                        reverse=True)]
+
+            for i in ind[:5]:
+                stdout += '{:<7} {:<10.2f} {:}\n'.format(v[i][2],
+                                                         v[i][0],
+                                                         v[i][1])
+            stdout += '\n'
+
+    return stdout
+
+
+def cpu_warning(cutoff=2.0, node='-1', users=None):
+
+    bpstat = Popen('bpstat -P {}'.format(str(node)).split(),
+                   stdin=PIPE, stdout=PIPE)
+    ls = Popen('ps -e -o pid,%cpu,user,comm='.split(), stdout=bpstat.stdin)
+    output = bpstat.communicate()[0]
+    ls.wait()
+
+    CPU = {}
+    for line in output.split('\n')[1:-1]:
+
+        if str(node) == '-1' or str(node) == 'master':
+            ID = line.split()[0]
+            cpu = float(line.split()[1]) / 100
+            user = line.split()[2]
+            com = ' '.join(line.split()[3:])
+        else:
+            ID = line.split()[1]
+            cpu = float(line.split()[2]) / 100
+            user = line.split()[3]
+            com = ' '.join(line.split()[4:])
+
+        if user not in CPU.keys():
+            CPU[user] = [cpu, [[cpu, com, int(ID)]]]
+        else:
+            CPU[user][0] += cpu
+            CPU[user][1] += [[cpu, com, int(ID)]]
+
+    SUM = sum([v[0] for k, v in CPU.iteritems()])
+
+    # Sort by CPU usage
+    sort_users = [u for u, m in sorted([[k, v[0]] for k, v in CPU.iteritems()],
+                  key=lambda x: x[1], reverse=True)]
+
+    if users is None:
+        users = sort_users
+    elif isinstance(users, str):
+        users = [users]
+
+    time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    stdout = '{}\nCPU load: {:>38.2f} \n'.format(time, SUM)
+
+    for user in users:
+        tot, v = CPU[user]
+        stdout += 'user: {:<34} {:>7.2f}\n'.format(user, tot)
+        if tot > float(cutoff):
+            stdout += '\n    Top 5 processes:\n'
+            stdout += 'PID     CPU        COMM\n'
+
+            ind = [i for i, l in sorted(enumerate(v),
+                                        key=lambda x: x[1],
+                                        reverse=True)]
+
+            for i in ind[:5]:
+                stdout += '{:<7} {:<10.2f} {:}\n'.format(v[i][2],
+                                                         v[i][0],
+                                                         v[i][1])
+            stdout += '\n'
+
+    return stdout
+
+def main():
+    for n in range(-1, 31):
+        try:
+            time = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M')
+
+            node_mem = check_output(['bpsh', str(n), 'free'])
+            mem0, mem1 = node_mem.split()[15:17]
+            mem = (float(mem0) / (float(mem1) + float(mem0))) * 100.
+
+            node_idle = check_output(['bpsh', str(n), 'mpstat'])
+            # For some reason, the mpstat run by Cron returns military time
+            # This changes the indexing which is accounted for here.
+            try:
+                cpu = 100. - float(node_idle.split()[26])
+            except(IndexError):
+                cpu = 100. - float(node_idle.split()[24])
+
+            node_load = check_output(['bpsh', str(n), 'uptime'])
+            load = node_load.split()[-3].rstrip(',')
+
+            sto = '{} {:1.2f} {} {} \n'.format(time, mem, cpu, load)
+            with open('/tmp/logs/node{}.log'.format(n), 'a') as f:
+                f.write(sto)
+
+            if n == -1:
+                if mem > 80:
+                    with open('/tmp/logs/memory-warning.log', 'a') as f:
+                        f.write(memory_warning())
+                if float(load) > 12.:
+                    with open('/tmp/logs/cpu-warning.log', 'a') as f:
+                        f.write(cpu_warning())
+        except(CalledProcessError):
+            pass
+
+if __name__ == "__main__":
+    main()
+#+END_SRC
+
+* Current Memory Usage
+#+BEGIN_SRC python
+from gilgamesh.logging import memory_warning
+print(memory_warning(cutoff=4.0, node='-1', users=None))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+2016-07-25 13:51
+Total allocated memory:                    22.23 GB
+user: apache                                5.65 GB
+
+    Top 5 processes:
+PID     MEM (GB)   COMM
+86720   0.28       httpd
+57837   0.28       httpd
+57836   0.28       httpd
+57835   0.28       httpd
+57833   0.28       httpd
+
+user: root                                  3.88 GB
+user: jboes                                 2.23 GB
+user: tianyug1                              2.06 GB
+user: chenw3                                1.71 GB
+user: fgeng                                 1.26 GB
+user: devonw                                1.11 GB
+user: jhaddad                               1.08 GB
+user: jkitchin                              0.93 GB
+user: tengm                                 0.75 GB
+user: sbhartiy                              0.68 GB
+user: yingjuy                               0.22 GB
+user: gdm                                   0.22 GB
+user: nobody                                0.21 GB
+user: 68                                    0.07 GB
+user: smmsp                                 0.06 GB
+user: xfs                                   0.02 GB
+user: rpc                                   0.02 GB
+user: dbus                                  0.02 GB
+user: rpcuser                               0.02 GB
+user: ntp                                   0.02 GB
+
+#+end_example
+
+* Current CPU Usage
+This
+
+#+BEGIN_SRC python
+from gilgamesh.logging import cpu_warning
+print(cpu_warning(cutoff=2.0, node='-1', users=None))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+2016-07-25 13:52
+CPU load:                                   0.35 
+user: chenw3                                0.23
+user: jboes                                 0.04
+user: tianyug1                              0.02
+user: root                                  0.02
+user: devonw                                0.01
+user: sbhartiy                              0.01
+user: jkitchin                              0.01
+user: nobody                                0.01
+user: fgeng                                 0.01
+user: jhaddad                               0.00
+user: tengm                                 0.00
+user: rpcuser                               0.00
+user: ntp                                   0.00
+user: dbus                                  0.00
+user: yingjuy                               0.00
+user: apache                                0.00
+user: rpc                                   0.00
+user: smmsp                                 0.00
+user: 68                                    0.00
+user: xfs                                   0.00
+user: gdm                                   0.00
+
+#+end_example
+
+* Graphs
+#+BEGIN_SRC python :output raw
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+import matplotlib.dates as mdates
+import datetime
+mpl.rcParams.update({'font.size': 10})
+
+# Number of days to report
+days = 2
+
+nodes = [-1]
+for n in nodes:
+    try:
+	data = []
+	with open('/tmp/logs/node{}.log'.format(n)) as f:
+	    lines = f.readlines()
+	    for line in lines:
+		data += [line.split()]
+
+	data = np.array(data)
+	times = [datetime.datetime.strptime(t, '%Y-%m-%dT%H:%M') for t in data.T[0]]
+
+	fig, ax = plt.subplots(2, 1, sharex=True, figsize=(6, 3))
+	ax[0].set_ylim(0, 100)
+
+	fig.autofmt_xdate()
+	xtick_locator = mdates.AutoDateLocator()
+	xtick_formatter = mdates.AutoDateFormatter(xtick_locator)
+
+	fig.autofmt_xdate()
+	ax[1].xaxis.set_major_formatter(xtick_formatter)
+	ax[1].xaxis.set_major_locator(xtick_locator)
+
+	ax[0].plot(mdates.date2num(times[-days*1440:]), data.T[1][-days*1440:], 'g-')
+	ax[1].plot(mdates.date2num(times[-days*1440:]), data.T[3][-days*1440:], 'r-')
+
+        ax[1].set_xlabel('')
+        ax[0].set_ylabel('% mem', color='g')
+        ax[1].set_ylabel('load', color='r')
+	plt.tight_layout(h_pad=-0.1)
+	plt.savefig('../images/node{}.png'.format(n))
+	print('[[../images/node{}.png]]'.format(n))
+    except(IOError):
+        pass
+#+END_SRC
+
