@@ -242,7 +242,7 @@ With prefix clear results and resubmit."
       (cond
        ;; job is done, do nothing.
        ((and (stringp results)
-      	     (< 1 (length (s-split "\n" results))))
+	     (not  (string-match "\\([0-9]*\\)\\.gilgamesh\\.cheme\\.cmu\\.edu" results)))
       	nil)
        ;; Job has been submitted. Need to check on it and get output
        ;; if it exists
