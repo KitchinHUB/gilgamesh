@@ -214,6 +214,75 @@ Unique jobs
 
 (setq helm-top-command "env COLUMNS=%s ps aux | bpstat -P master | sort -k 3 -n -r ")
 
+
+;; * qsub a block
+(defun qsub-src-block (arg)
+  "Submit an org-src-block to the queue.
+Use :walltime in the header to specify the walltime
+Use :mem in the header to specify the memory (in gb)
+Use :ppn to specify the processors per node
+Use :options to specify other options.
+With prefix clear results and resubmit."
+  (interactive "P")
+  (when arg (org-babel-remove-result))
+  (save-excursion
+    (let* ((result-pos (org-babel-where-is-src-block-result))
+  	   (results (when result-pos
+  		      (save-excursion
+  			(goto-char result-pos)
+  			(setq results (org-babel-read-result)))))
+	   (info (org-babel-get-src-block-info))
+	   (walltime (or (cdr (assoc :walltime (nth 2 info))) "23:00:00"))
+	   (memory (or (cdr (assoc :mem (nth 2 info))) "2gb"))
+	   (ppn (or (cdr (assoc :ppn (nth 2 info))) "1"))
+	   (options (or (cdr (assoc :qsub-options (nth 2 info))) ""))
+  	   jobid
+  	   results-file)
+
+      (cond
+       ;; job is done, do nothing.
+       ((and (stringp results)
+      	     (< 1 (length (s-split "\n" results))))
+      	nil)
+       ;; Job has been submitted. Need to check on it and get output
+       ;; if it exists
+       ((and (stringp results)
+      	     (= 1 (length (s-split "\n" results)))
+      	     (string-match "\\([0-9]*\\)\\.gilgamesh\\.cheme\\.cmu\\.edu" results))
+      	(setq jobid (match-string 1 results))
+      	(setq results-file (format "STDIN.o%s" jobid))
+      	(if (not (file-exists-p results-file))
+      	    (message "No output found for %s yet.\n%s"
+      		     jobid
+      		     (shell-command-to-string (format "qstat %s" jobid)))
+      	  ;; retrieve results
+      	  (org-babel-remove-result)
+
+      	  (org-babel-insert-result
+      	   (with-temp-buffer
+      	     (insert-file-contents
+      	      results-file)
+      	     (buffer-string))
+      	   (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info)))))
+      	  (delete-file results-file)))
+       ;; job needs to be submitted
+       (t
+      	(let* ((src (org-element-property :value
+      					  (org-element-at-point)))
+      	       output)
+
+      	  (setq output (with-temp-buffer
+      			 (insert src)
+      			 (shell-command-on-region
+      			  (point-min) (point-max)
+      			  (format "qsub -V -l walltime=%s,mem=%s,nodes=1:ppn=%s %s -joe"
+				  walltime
+				  memory
+				  ppn
+				  options))))
+      	  (org-babel-insert-result (with-current-buffer
+      				       "*Shell Command Output*"
+      				     (buffer-string)))))))))
 (provide 'gilgamesh)
 
 ;;; gilgamesh.el ends here
