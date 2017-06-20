@@ -1,0 +1,372 @@
+These nodes have high swap and/or crashed
+
+#+BEGIN_SRC emacs-lisp
+(loop for node in '("n17")
+      append
+      (with-temp-buffer
+	(insert (shell-command-to-string (format "pbsnodes %s" node)))
+
+	;; now find jobs, and replace them with links.
+	(goto-char (point-min))
+	(let ((found-jobs '()))
+	  (while (re-search-forward "[0-9]*/\\([0-9]*.gilgamesh.cheme.cmu.edu\\)" nil t)
+	    (add-to-list 'found-jobs (match-string 1))
+	    (setf (buffer-substring (match-beginning 0) (match-end 0))
+		  (format "[[job:%s][%s]]" (match-string 1) (match-string 0)))
+	    ;; go to end of link we just inserted to avoid finding this link again.
+	    (re-search-forward "]]"))
+	  (loop for job in found-jobs
+		collect (append (list node)
+				      (split-string
+				       (nth 2 (split-string (shell-command-to-string
+							     (format "qstat %s" job))
+							     "\n"))))))))
+#+END_SRC
+
+#+RESULTS:
+| n17 | 1474772.gilgamesh | ...1ca8516b7fadc | tengm | 0 | R | short |
+| n17 | 1474770.gilgamesh | ...56a237163a283 | tengm | 0 | R | short |
+| n17 | 1474771.gilgamesh | ...b2e3c9dbcfb6e | tengm | 0 | R | short |
+| n17 | 1474774.gilgamesh | ...947dcb393f247 | tengm | 0 | R | short |
+| n17 | 1474773.gilgamesh | ...0aef53682f2c3 | tengm | 0 | R | short |
+
+* Getting memory usage of jobs
+
+#+BEGIN_SRC sh
+ qstat -f -x
+#+END_SRC
+
+#+RESULTS:
+:
+
+
+#+BEGIN_SRC xml
+<Data>
+  <Job>
+    <Job_Id>1429368.gilgamesh.cheme.cmu.edu</Job_Id>
+    <Job_Name>/home-research/chenw3/research/molecules/strcuture=mono211/vacancy=O8</Job_Name>
+    <Job_Owner>chenw3@gilgamesh.cheme.cmu.edu</Job_Owner>
+    <resources_used>
+      <cput>169:47:59</cput>
+      <mem>836960kb</mem>
+      <vmem>1818604kb</vmem>
+      <walltime>31:02:52</walltime>
+    </resources_used>
+    <job_state>R</job_state>
+    <queue>long</queue>
+    <server>gilgamesh.cheme.cmu.edu</server>
+    <Checkpoint>u</Checkpoint>
+    <ctime>1469493835</ctime>
+    <Error_Path>gilgamesh.cheme.cmu.edu:/home-research/chenw3/research/molecules/strcuture=mono211/vacancy=O8/vacancy=O8.e1429368</Error_Path>
+    <exec_host>n27/26</exec_host>
+    <Hold_Types>n</Hold_Types>
+    <Join_Path>oe</Join_Path>
+    <Keep_Files>n</Keep_Files>
+    <Mail_Points>a</Mail_Points>
+    <mtime>1469493836</mtime>
+    <Output_Path>gilgamesh.cheme.cmu.edu:/home-research/chenw3/research/molecules/strcuture=mono211/vacancy=O8/vacancy=O8.o1429368</Output_Path>
+    <Priority>0</Priority><qtime>1469493835</qtime>
+    <Rerunable>True</Rerunable>
+    <Resource_List>
+      <mem>2gb</mem>
+      <neednodes>1:ppn=1</neednodes>
+      <nice>15</nice>
+      <nodect>1</nodect>
+      <nodes>1:ppn=1</nodes>
+      <walltime>168:00:00</walltime>
+    </Resource_List>
+    <session_id>67857</session_id>
+    <substate>42</substate>
+    <Variable_List>PBS_O_HOME=/home-research/chenw3,PBS_O_LANG=en_US.UTF-8,PBS_O_LOGNAME=chenw3,PBS_O_PATH=/home-research/chenw3/python/ase/tools:/home-research/chenw3/python/jasp/jasp/bin:/opt/kitchingroup/vasp-5.3.5/vtstscripts-914:/home-research/jkitchin/bin:/opt/vtk/bin:/opt/kitchingroup/vasp-5.3.5/vaspy/bin:/opt/kitchingroup/vasp-5.3.5/ase-s16/tools:/opt/kitchingroup/vasp-5.3.5/jasp-s16/jasp/bin:/opt/kitchingroup/vasp-5.3.5/bin:/usr/mpi/intel/openmpi-1.4-qlc/bin:/opt/kitchingroup/CANOPY/Canopy_64bit/User/bin:/opt/maui/bin:/opt/fav/bin:/usr/local/texlive/2012/bin/x86_64-linux:/opt/intel/Compiler/11.1/072/bin/intel64:/opt/intel/impi/4.0.0.028/intel64/bin:/usr/lib64/qt-3.3/bin:/usr/kerberos/bin:/usr/local/bin:/bin:/usr/bin:/usr/share/pvm3/lib:/home-research/chenw3/bin,PBS_O_MAIL=/var/spool/mail/chenw3,PBS_O_SHELL=/bin/bash,PBS_O_HOST=gilgamesh.cheme.cmu.edu,PBS_SERVER=gilgamesh.cheme.cmu.edu,PBS_O_WORKDIR=/home-research/chenw3/research/molecules/strcuture=mono211/vacancy=O8,PBS_O_QUEUE=q_feed</Variable_List>
+
+    <euser>chenw3</euser>
+    <egroup>kitchingroup</egroup>
+    <hashname>1429368.gilgamesh.cheme.cmu.edu</hashname>
+    <queue_rank>623167</queue_rank>
+    <queue_type>E</queue_type>
+    <etime>1469493835</etime>
+    <submit_args>-joe -N /home-research/chenw3/research/molecules/strcuture=mono211/vacancy=O8 -l walltime=168:00:00 -l nodes=1:ppn=1 -l mem=2GB</submit_args>
+    <start_time>1469493836</start_time>
+    <start_count>1</start_count>
+  </Job>
+</Data>
+
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(defun job-memory-used (jobid)
+  (let* ((xml (with-temp-buffer
+		(insert (shell-command-to-string (format "qstat -f -x %s" jobid)))
+		(car (xml-parse-region (point-min) (point-max)))))
+	 (job (car (xml-get-children xml 'Job)))
+	 (resources (car (xml-get-children job 'resources_used)))
+	 (mem (car (xml-get-children resources 'mem))))
+	 (/ (string-to-number (nth 2 mem)) 1024.0 1024)))
+
+(append '(("node" "mem (GB)" "jobid" "name" "user" "time" "state" "queue"))
+'(hline)
+	(loop for node in (mapcar (lambda (n) (format "n%s" n)) (number-sequence 1 30))
+	      append
+	      (with-temp-buffer
+		(insert (shell-command-to-string (format "pbsnodes %s" node)))
+
+		;; now find jobs, and replace them with links.
+		(goto-char (point-min))
+		(let ((found-jobs '()))
+		  (while (re-search-forward "[0-9]*/\\([0-9]*.gilgamesh.cheme.cmu.edu\\)" nil t)
+		    (add-to-list 'found-jobs (match-string 1))
+		    (setf (buffer-substring (match-beginning 0) (match-end 0))
+			  (format "[[job:%s][%s]]" (match-string 1) (match-string 0)))
+		    ;; go to end of link we just inserted to avoid finding this link again.
+		    (re-search-forward "]]"))
+		  (loop for job in found-jobs
+			collect (append (list node) (list (format "%1.2f" (job-memory-used job)))
+					(split-string
+					 (nth 2 (split-string (shell-command-to-string
+							       (format "qstat %s" job))
+							      "\n")))))))))
+#+END_SRC
+
+#+RESULTS:
+| node | mem (GB) | jobid             | name             | user     |     time | state | queue |
+|------+----------+-------------------+------------------+----------+----------+-------+-------|
+| n25  |    20.54 | 1466777.gilgamesh | .../db14/11-11   | chenw3   | 401:46:3 | R     | long  |
+| n26  |    20.54 | 1466776.gilgamesh | .../db14/10-10   | chenw3   | 422:22:1 | R     | long  |
+| n26  |    20.54 | 1466775.gilgamesh | .../db14/9-9     | chenw3   | 420:40:5 | R     | long  |
+| n7   |    19.63 | 1471426.gilgamesh | .../db10/20-20/  | tianyug1 | 273:06:0 | R     | long  |
+| n2   |    19.51 | 1471428.gilgamesh | .../db10/25-25/  | tianyug1 | 302:17:4 | R     | long  |
+| n19  |    11.20 | 1467689.gilgamesh | ...p+0.035_8.4_0 | fgeng    | 130:57:5 | R     | long  |
+| n26  |    11.04 | 1471464.gilgamesh | .../p+0.02_9_0   | fgeng    | 42:21:37 | R     | long  |
+| n29  |    10.93 | 1471463.gilgamesh | .../p+0.02_9_0   | fgeng    | 38:58:03 | R     | long  |
+| n29  |    10.63 | 1473125.gilgamesh | .../p+0.02_8.4_0 | fgeng    | 33:23:03 | R     | long  |
+| n29  |    10.45 | 1473119.gilgamesh | .../p+0.02_8.4_1 | fgeng    | 32:33:40 | R     | long  |
+| n3   |     9.87 | 1474577.gilgamesh | ...d76edc9f25a6e | jhaddad  | 16:56:01 | R     | short |
+| n2   |     9.51 | 1474578.gilgamesh | ...20722a1841238 | jhaddad  | 16:56:01 | R     | short |
+| n29  |     9.45 | 1471434.gilgamesh | ...p+0.035_8.4_4 | fgeng    | 41:27:04 | R     | long  |
+| n6   |     8.47 | 1474571.gilgamesh | ...34278757d5ffc | jhaddad  | 17:29:02 | R     | short |
+| n6   |     3.46 | 1474572.gilgamesh | ...ad165eb84c0af | jhaddad  | 17:29:01 | R     | short |
+| n26  |     3.46 | 1474592.gilgamesh | ...234eaa949c017 | jhaddad  | 16:29:26 | R     | short |
+| n25  |     3.33 | 1474593.gilgamesh | ...0a13cd1ebc497 | jhaddad  | 16:30:00 | R     | short |
+| n5   |     3.30 | 1474573.gilgamesh | ...a76cdea8fb461 | jhaddad  | 17:29:41 | R     | short |
+| n25  |     3.21 | 1474594.gilgamesh | ...32f2449f643a0 | jhaddad  | 16:30:00 | R     | short |
+| n26  |     3.21 | 1474589.gilgamesh | ...becee9d712702 | jhaddad  | 16:29:26 | R     | short |
+| n5   |     3.19 | 1474574.gilgamesh | ...9baf812609fcd | jhaddad  | 16:56:52 | R     | short |
+| n25  |     3.10 | 1474595.gilgamesh | ...d21aadc0c2a3a | jhaddad  | 16:30:00 | R     | short |
+| n26  |     3.09 | 1474590.gilgamesh | ...2231ec7a5994a | jhaddad  | 16:29:26 | R     | short |
+| n5   |     3.08 | 1474575.gilgamesh | ...edea8f0c0a824 | jhaddad  | 16:56:07 | R     | short |
+| n3   |     2.99 | 1474576.gilgamesh | ...ad7faa5db3305 | jhaddad  | 16:56:01 | R     | short |
+| n25  |     2.99 | 1474596.gilgamesh | ...0318d6a294487 | jhaddad  | 16:29:59 | R     | short |
+| n26  |     2.99 | 1474591.gilgamesh | ...a55376086af50 | jhaddad  | 16:29:26 | R     | short |
+| n2   |     0.06 | 1474601.gilgamesh | .../0-4-neb      | tianyug1 | 00:00:00 | R     | long  |
+| n3   |     0.06 | 1474600.gilgamesh | .../s-s-neb      | tianyug1 | 00:00:00 | R     | long  |
+| n3   |     0.06 | 1474599.gilgamesh | .../s-t-neb      | tianyug1 | 00:00:00 | R     | long  |
+| n3   |     0.06 | 1474598.gilgamesh | .../s-s-neb      | tianyug1 | 00:00:00 | R     | long  |
+| n3   |     0.06 | 1470327.gilgamesh | ...580eaf5b18d7b | jboes    | 00:00:00 | R     | short |
+| n4   |     0.06 | 1474700.gilgamesh | ...b98eee577a9b2 | tengm    | 00:00:00 | R     | short |
+| n5   |     0.06 | 1474697.gilgamesh | ...d4048f735659d | tengm    | 00:00:00 | R     | short |
+| n5   |     0.06 | 1474696.gilgamesh | ...ef2ab9c886032 | tengm    | 00:00:00 | R     | short |
+| n5   |     0.06 | 1474695.gilgamesh | ...974fe16975f01 | tengm    | 00:00:00 | R     | short |
+| n5   |     0.06 | 1474694.gilgamesh | ...8f6edbce24dc9 | tengm    | 00:00:00 | R     | short |
+| n6   |     0.06 | 1474790.gilgamesh | ...d00c63190b64f | tengm    | 00:00:05 | R     | short |
+| n6   |     0.06 | 1474789.gilgamesh | ...07628d86cef42 | tengm    | 00:00:06 | R     | short |
+| n6   |     0.06 | 1474788.gilgamesh | ...ddd4f6927daaf | tengm    | 00:00:06 | R     | short |
+| n6   |     0.06 | 1474787.gilgamesh | ...b128e1061cb83 | tengm    | 00:00:06 | R     | short |
+| n6   |     0.06 | 1474786.gilgamesh | ...e19f4ad64a31b | tengm    | 00:00:06 | R     | short |
+| n6   |     0.06 | 1474785.gilgamesh | ...aa57da79fc7fb | tengm    | 00:00:06 | R     | short |
+| n6   |     0.06 | 1474784.gilgamesh | ...3472fc2cc7a80 | tengm    | 00:00:05 | R     | short |
+| n9   |     0.06 | 1474783.gilgamesh | ...95df861f67fdc | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474782.gilgamesh | ...8f13da99f2a79 | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474781.gilgamesh | ...9166d14ef3aef | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474780.gilgamesh | ...172c6e7e414eb | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474779.gilgamesh | ...3ba570f10a816 | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474778.gilgamesh | ...8efdc61bea56d | tengm    | 00:00:07 | R     | short |
+| n9   |     0.06 | 1474777.gilgamesh | ...cc34a5a3b6537 | tengm    | 00:00:07 | R     | short |
+| n13  |     0.06 | 1474776.gilgamesh | ...46ba29fe6932f | tengm    | 00:00:00 | R     | short |
+| n13  |     0.06 | 1474766.gilgamesh | ...4a0f5aed723af | tengm    | 00:00:00 | R     | short |
+| n13  |     0.06 | 1474765.gilgamesh | ...9743cd15226c6 | tengm    | 00:00:00 | R     | short |
+| n13  |     0.06 | 1474721.gilgamesh | ...f7f6f6eb791a2 | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474772.gilgamesh | ...1ca8516b7fadc | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474770.gilgamesh | ...56a237163a283 | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474769.gilgamesh | ...87d63e4945fa0 | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474768.gilgamesh | ...d3f7d07f1933f | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474775.gilgamesh | ...1184b68ab8a56 | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474771.gilgamesh | ...b2e3c9dbcfb6e | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474774.gilgamesh | ...947dcb393f247 | tengm    | 00:00:00 | R     | short |
+| n17  |     0.06 | 1474773.gilgamesh | ...0aef53682f2c3 | tengm    | 00:00:00 | R     | short |
+| n18  |     0.06 | 1474767.gilgamesh | ...875738357eeba | tengm    | 00:02:48 | R     | short |
+| n18  |     0.06 | 1474713.gilgamesh | ...2a1570af7cae7 | tengm    | 00:01:39 | R     | short |
+| n18  |     0.06 | 1474712.gilgamesh | ...1215223305f80 | tengm    | 00:00:12 | R     | short |
+| n18  |     0.06 | 1474710.gilgamesh | ...aa88ff3b4b367 | tengm    | 00:00:00 | R     | short |
+| n18  |     0.06 | 1474709.gilgamesh | ...87f125cfa6706 | tengm    | 00:00:00 | R     | short |
+| n18  |     0.06 | 1474708.gilgamesh | ...2331ebd7d0c0a | tengm    | 00:00:00 | R     | short |
+| n18  |     0.06 | 1474706.gilgamesh | ...5692c84eb9575 | tengm    | 00:00:00 | R     | short |
+| n18  |     0.06 | 1474704.gilgamesh | ...5bdbab742e9e5 | tengm    | 00:00:00 | R     | short |
+| n19  |     0.06 | 1474703.gilgamesh | ...9b6f8b48319c0 | tengm    | 00:00:00 | R     | short |
+| n19  |     0.06 | 1474702.gilgamesh | ...281a7c88822b5 | tengm    | 00:00:00 | R     | short |
+| n19  |     0.06 | 1474714.gilgamesh | ...c54f93ccbbe06 | tengm    | 00:00:00 | R     | short |
+| n19  |     0.06 | 1474656.gilgamesh | ...dce20edae5563 | tengm    | 00:00:00 | R     | short |
+| n19  |     0.06 | 1474722.gilgamesh | ...2d81265e5b630 | tengm    | 00:07:31 | R     | short |
+| n19  |     0.06 | 1474139.gilgamesh | .../site=0       | tianyug1 | 00:00:00 | R     | long  |
+| n22  |     0.06 | 1474682.gilgamesh | ...0ca786bf9768a | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474717.gilgamesh | ...746dd6cd86fc8 | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474648.gilgamesh | ...b0a1c7622e12b | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474762.gilgamesh | ...92ba8c73df30e | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474718.gilgamesh | ...7ec94ae410ba3 | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474705.gilgamesh | ...7b7323a7bd06f | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474691.gilgamesh | ...0fd0e2a6b9f7c | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474711.gilgamesh | ...c8022c3e03dd4 | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474681.gilgamesh | ...7194b53ab3e4b | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474723.gilgamesh | ...909918af0e09a | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474688.gilgamesh | ...88d537f8d88fd | tengm    | 00:00:00 | R     | short |
+| n22  |     0.06 | 1474679.gilgamesh | ...93bf47bd34298 | tengm    | 00:00:00 | R     | short |
+| n23  |     0.06 | 1474615.gilgamesh | ...22cf0cbf79127 | tengm    | 00:00:00 | R     | short |
+| n23  |     0.06 | 1474685.gilgamesh | ...593541e820d42 | tengm    | 00:00:03 | R     | short |
+| n23  |     0.06 | 1474684.gilgamesh | ...7e2c05533acbf | tengm    | 00:00:00 | R     | short |
+| n23  |     0.06 | 1474680.gilgamesh | ...01e003afcc633 | tengm    | 00:00:01 | R     | short |
+| n23  |     0.06 | 1474646.gilgamesh | ...71c8c3aa05fc3 | tengm    | 00:00:00 | R     | short |
+| n23  |     0.06 | 1474653.gilgamesh | ...588ebb98a1591 | tengm    | 00:00:01 | R     | short |
+| n23  |     0.06 | 1474652.gilgamesh | ...51a0572519845 | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474715.gilgamesh | ...38d825051255b | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474707.gilgamesh | ...6d46ca9169d24 | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474759.gilgamesh | ...cc2613d97e530 | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474701.gilgamesh | ...a2322e597dbc0 | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474760.gilgamesh | ...cddeff1aadc7e | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474145.gilgamesh | .../site=terrace | tianyug1 | 00:00:00 | R     | long  |
+| n25  |     0.06 | 1474716.gilgamesh | ...e1250fcc29a39 | tengm    | 00:00:00 | R     | short |
+| n25  |     0.06 | 1474761.gilgamesh | ...5df2050b4efc9 | tengm    | 00:00:00 | R     | short |
+| n26  |     0.06 | 1470328.gilgamesh | ...c3ec9c78aa455 | jboes    | 00:00:00 | R     | short |
+| n29  |     0.06 | 1474144.gilgamesh | .../site=1       | tianyug1 | 00:00:02 | R     | long  |
+| n29  |     0.06 | 1474143.gilgamesh | .../site=0       | tianyug1 | 00:00:02 | R     | long  |
+| n29  |     0.06 | 1474791.gilgamesh | ...64f8fc6b33cd8 | tengm    | 00:00:00 | R     | short |
+| n29  |     0.06 | 1469907.gilgamesh | .../0-1-neb      | tianyug1 | 00:00:00 | R     | long  |
+| n29  |     0.06 | 1474142.gilgamesh | ...class=perfect | tianyug1 | 00:00:02 | R     | long  |
+| n29  |     0.06 | 1474140.gilgamesh | .../site=1       | tianyug1 | 00:00:02 | R     | long  |
+| n25  |     0.05 | 1471462.gilgamesh | ...vib-dt1-496up | fgeng    | 41:12:37 | R     | long  |
+| n29  |     0.03 | 1471457.gilgamesh | ...vib-dt1-496up | fgeng    | 39:51:42 | R     | long  |
+| n16  |     0.01 | 1474597.gilgamesh | CondVR.sh        | azeeshan | 00:00:00 | R     | long  |
+
+* job property
+
+#+BEGIN_SRC emacs-lisp
+(defun job-property (jobid &rest xpath)
+  (let* ((xml (with-temp-buffer
+		(insert (shell-command-to-string (format "qstat -f -x %s" jobid)))
+		(car (xml-parse-region (point-min) (point-max)))))
+		(job (car (xml-get-children xml 'Job)))	 )
+    (loop for x in xpath
+	  with node = job
+	  do
+	  (setq node (car (xml-get-children node x)))
+	  (message "%s %s" node x)
+	  finally
+	  return (nth 2 node))))
+
+
+  (job-property "1430240" 'resources_used 'vmem)
+#+END_SRC
+
+#+RESULTS:
+: 52851176kb
+
+
+
+#+BEGIN_SRC sh   :walltime 10:00 :mem 4gb
+#!/bin/bash
+
+pwd
+#+END_SRC
+
+#+RESULTS:
+: /home-research/jkitchin
+ref:test
+* Jan 11, 2017
+
+#+BEGIN_SRC emacs-lisp
+(loop for node in '("n15" "n16" "n17" "n18" "n19" "n22" "n23")
+      append
+      (with-temp-buffer
+	(insert (shell-command-to-string (format "pbsnodes %s" node)))
+
+	;; now find jobs, and replace them with links.
+	(goto-char (point-min))
+	(let ((found-jobs '()))
+	  (while (re-search-forward "[0-9]*/\\([0-9]*.gilgamesh.cheme.cmu.edu\\)" nil t)
+	    (add-to-list 'found-jobs (match-string 1))
+	    (setf (buffer-substring (match-beginning 0) (match-end 0))
+		  (format "[[job:%s][%s]]" (match-string 1) (match-string 0)))
+	    ;; go to end of link we just inserted to avoid finding this link again.
+	    (re-search-forward "]]"))
+	  (loop for job in found-jobs
+		collect (append (list node)
+				      (split-string
+				       (nth 2 (split-string (shell-command-to-string
+							     (format "qstat %s" job))
+							     "\n"))))))))
+#+END_SRC
+
+#+RESULTS:
+| n15 | 1541130.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n16 | 1541128.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n17 | 1541127.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n18 | 1541126.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n19 | 1541125.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n22 | 1541122.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+| n23 | 1541121.gilgamesh | job-NaO2-Bulk.sh | obs | 00:00:00 | R | long |
+
+* <2017-01-12 Thu>
+
+#+BEGIN_SRC emacs-lisp
+(loop for node in '("n23" "n24" "n25" "n26" "n27" "n28" "n29")
+      append
+      (with-temp-buffer
+	(insert (shell-command-to-string (format "pbsnodes %s" node)))
+
+	;; now find jobs, and replace them with links.
+	(goto-char (point-min))
+	(let ((found-jobs '()))
+	  (while (re-search-forward "[0-9]*/\\([0-9]*.gilgamesh.cheme.cmu.edu\\)" nil t)
+	    (add-to-list 'found-jobs (match-string 1))
+	    (setf (buffer-substring (match-beginning 0) (match-end 0))
+		  (format "[[job:%s][%s]]" (match-string 1) (match-string 0)))
+	    ;; go to end of link we just inserted to avoid finding this link again.
+	    (re-search-forward "]]"))
+	  (loop for job in found-jobs
+		collect (append (list node)
+				      (split-string
+				       (nth 2 (split-string (shell-command-to-string
+							     (format "qstat %s" job))
+							     "\n"))))))))
+#+END_SRC
+
+#+RESULTS:
+| n23 | 1541153.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n24 | 1541152.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n25 | 1541151.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n26 | 1541150.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n27 | 1542140.gilgamesh | .../NiCO/CO      | ktran | 00:00:32 | R | long |
+| n27 | 1541149.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n28 | 1541148.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+| n29 | 1541147.gilgamesh | job-NaO2-Bulk.sh | obs   | 00:00:00 | R | long |
+
+#+BEGIN_SRC emacs-lisp
+(loop for node in '("n7" "n15" "n16" "n18" "n19" "n22" "n23")
+      append
+      (with-temp-buffer
+	(insert (shell-command-to-string (format "pbsnodes %s" node)))
+
+	;; now find jobs, and replace them with links.
+	(goto-char (point-min))
+	(let ((found-jobs '()))
+	  (while (re-search-forward "[0-9]*/\\([0-9]*.gilgamesh.cheme.cmu.edu\\)" nil t)
+	    (add-to-list 'found-jobs (match-string 1))
+	    (setf (buffer-substring (match-beginning 0) (match-end 0))
+		  (format "[[job:%s][%s]]" (match-string 1) (match-string 0)))
+	    ;; go to end of link we just inserted to avoid finding this link again.
+	    (re-search-forward "]]"))
+	  (loop for job in found-jobs
+		collect (append (list node)
+				      (split-string
+				       (nth 2 (split-string (shell-command-to-string
+							     (format "qstat %s" job))
+							     "\n"))))))))
+#+END_SRC
