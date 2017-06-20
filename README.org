@@ -232,7 +232,8 @@ elisp:ivy-net will show a list of nodes with net-traffic. The default action is 
 * Administrative notes
 
 ** Adding new users
-Use the  as gui tool to add new users and configure groups. 
+
+Use the gui tool (system-config-users) to add new users and configure groups.
 
 #+BEGIN_SRC sh
 sudo 
@@ -253,10 +254,38 @@ chage -d 0 userid
 
 to force the users to change their passwords on login.
 
+I recommend you use a site like http://makeagoodpassword.com to generate reasonable passwords.
 
 ** Restarting torque daemons
+
 To restart the torque daemon on a compute node, all of the startup scripts are located in /etc/beowulf/init.d on the head node.  To start a script on a particular compute node, run the following command:
 
 NODE=15 /etc/beowulf/init.d/90torque
 
 where '15' is the node number.  You may get some warnings that some mounts are already there, but the net result should be that pbs_mom is restarted on that node.
+
+** Restarting nodes
+
+Most of the time you can go to http://gilgamesh.cheme.cmu.edu/scyld-imf to reboot nodes. You need the root password for this. Click on the nodes tab, select the nodes to reboot, and then click IPMI -> IPMI Power Cycle to restart the node. They usually crash because they run out of memory.
+
+Occasionally you have to go to the cluster room and manually power cycle the nodes.
+
+** Killing jobs on nodes that have crashed
+
+Sometimes jobs get stuck in the queue when nodes crash. In that case I usually delete the job like this:
+
+#+BEGIN_SRC sh
+qdel -p jobid
+#+END_SRC
+
+You probably need to use sudo for this.
+
+** Restarting the cluster
+
+When the power goes out, or you shut the cluster down for some reason, it is a little tricky to restart it. For some reason the infiniband adapter does not come up when we expect it to, so the NFS server hangs for several minutes until it times out. When that happens the home-directories do not get mounted, so you have log in as root on the head node and run:
+
+#+BEGIN_SRC sh
+mount -a
+#+END_SRC
+
+That should make it work. We don't reboot often enough to fix this.
