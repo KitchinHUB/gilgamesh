@@ -13,6 +13,7 @@ Nodes 11 and 12 are currently dead.
 The cpus are from AMD and are connected by Gigabit and Infiniband networks.
 
 ** Accounts on gilgamesh
+
 Accounts are usually reserved for members of the research groups supporting gilgamesh (Kitchin, McGaughey, Viswanathan). To request an account send an email to jkitchin@andrew.cmu.edu with your name, advisor and andrewID in it.
 
 Note: There is no backup on gilgamesh. You are responsible for backing up your data.
@@ -289,3 +290,28 @@ mount -a
 #+END_SRC
 
 That should make it work. We don't reboot often enough to fix this.
+** Commands that might be helpful
+
+Check the man pages on these. I do not use them regularly
+
+- ipmitool :: can be used to reboot nodes at the command line
+- bpctl :: Control the operational state and ownership of compute nodes.
+- beostat :: beostat - Display raw data from the Beostat system.
+- beosetup :: Configure, restart, and view information about a Scyld ClusterWare cluster
+- beoconfig :: Operate on Scyld ClusterWare cluster configuration files.
+- service beowulf {start, stop, restart, reload} :: see /etc/init.d/beowulf
+- bpstat :: Show cluster node status and cluster process mapping.
+- beostatus ::  Display status information about the cluster
+- bpsh :: Run a program on a node. The nodes are setup in a way that we do not just ssh to a node to run a command, use bpsh.
+- bpcp :: Copies files and/or directories between cluster machines.
+
+
+The ps command shows all the processes on all the nodes.
+
+To see what is happening on the login node use:
+
+#+BEGIN_SRC sh
+ps aux | bpstat -P master | sort -k 3 -n -r
+#+END_SRC
+
+
